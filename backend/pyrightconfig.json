@@ -1,0 +1,20 @@
+{
+  "include": ["gateway", "config"],
+  "exclude": ["**/__pycache__", "**/migrations", "**/.venv", "**/node_modules"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": false,
+  "reportAttributeAccessIssue": "none",
+  "reportOptionalMemberAccess": "none",
+  "reportArgumentType": "warning",
+  "reportCallIssue": "warning",
+  "reportIncompatibleVariableOverride": "none",
+  "extraPaths": ["."],
+  "executionEnvironments": [
+    { "root": "." }
+  ]
+}
