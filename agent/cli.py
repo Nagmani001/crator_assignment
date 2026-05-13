@@ -8,6 +8,8 @@ from tools import GATEWAY_URL, jwt_server
 
 
 AGENT_ID = os.environ.get("AGENT_ID", "<set AGENT_ID env var>")
+NOTION_PAGE_ID = os.environ.get("NOTION_PAGE_ID", "")
+NOTION_BLOCK_ID = os.environ.get("NOTION_BLOCK_ID", "")
 
 SYSTEM_PROMPT = f"""
 You are a gateway-bound agent. Available tools:
@@ -17,6 +19,9 @@ You are a gateway-bound agent. Available tools:
 
 Hard rules:
 1. Begin by calling GenerateJWT with agent_id={AGENT_ID}. Remember the token; reuse it.
+   If GenerateJWT returns an error (is_error=true, non-200, network failure, or
+   missing token), STOP immediately. Do NOT issue any curl/Bash gateway calls
+   without a valid bearer token. Print the error verbatim and exit the task.
 2. For every gateway call, use curl with the bearer token, e.g.:
      curl -sS -w "\\nHTTP %{{http_code}}\\n" -X POST \\
        {GATEWAY_URL}/api/external-services/toolkits/<tk>/actions/<a>/call/ \\
@@ -45,12 +50,27 @@ DEFAULT_PROMPT = (
     "4. GET the input schema for each action so you know the exact payload shape.\n"
     "   The schemas are Notion-native (e.g. read_page requires `page_id`, update_page\n"
     "   requires `page_id` and `properties`, delete_page requires `block_id`).\n"
-    "5. Ask the user for a real Notion page_id (and a block_id for the delete step).\n"
-    "6. Call read_page with {\"page_id\":\"<id>\"} - expect HTTP 200.\n"
-    "7. Call update_page with {\"page_id\":\"<id>\",\"properties\":{...}} - expect\n"
+    f"5. Use page_id={NOTION_PAGE_ID!r} and block_id={NOTION_BLOCK_ID!r} (from env).\n"
+    "   If either is empty, STOP and tell user to set NOTION_PAGE_ID / NOTION_BLOCK_ID.\n"
+    "   Do NOT call AskUserQuestion. Do NOT prompt interactively.\n"
+    "6. Call read_page with {\"page_id\":\"<page_id>\"} - expect HTTP 200.\n"
+    "7. Call update_page with {\"page_id\":\"<page_id>\",\"properties\":{...}} - expect\n"
     "   HTTP 202, then poll the approval status. While polling, print the admin\n"
-    "   resolve curl command for the user to run.\n"
-    "8. Call delete_page with {\"block_id\":\"<id>\"} - expect HTTP 403.\n"
+    "   resolve curl command for the user to run. The resolve endpoint requires\n"
+    "   an ADMIN bearer token (NOT the agent JWT). Print this two-step block,\n"
+    "   substituting <ticket_id>:\n"
+    "     # 1. mint admin token (basic auth = Django superuser)\n"
+    "     ADMIN_TOKEN=$(curl -sS -u <user>:<pass> -X POST \\\n"
+    "       http://localhost:8000/api/auth/admin-token/ | jq -r .token)\n"
+    "     # 2. resolve with bearer\n"
+    "     curl -sS -X POST \\\n"
+    "       http://localhost:8000/api/external-services/approvals/<ticket_id>/resolve/ \\\n"
+    "       -H \"Authorization: Bearer $ADMIN_TOKEN\" \\\n"
+    "       -H 'content-type: application/json' \\\n"
+    "       -d '{\"decision\":\"approve\"}'\n"
+    "   Never print the resolve curl without the Authorization header. Never\n"
+    "   reuse the agent JWT for admin endpoints.\n"
+    "8. Call delete_page with {\"block_id\":\"<block_id>\"} - expect HTTP 403.\n"
     "9. GET /api/external-services/audit/ and summarize the outcomes recorded."
 )
 
@@ -104,9 +124,7 @@ def _render(msg):
                 print(f"[result]\n{indented}")
 
     elif cls == "ResultMessage":
-        cost = getattr(msg, "total_cost_usd", None)
-        if cost is not None:
-            print(f"\n[done] cost=${cost:.4f}")
+        print("\n[done]")
 
 
 def _preview_tool_input(name, inp):
