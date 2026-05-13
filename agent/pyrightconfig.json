@@ -1,0 +1,14 @@
+{
+  "include": ["api", "config"],
+  "exclude": ["**/__pycache__", "**/.venv", "**/node_modules"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.14.4",
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": false,
+  "executionEnvironments": [
+    { "root": "." }
+  ]
+}
