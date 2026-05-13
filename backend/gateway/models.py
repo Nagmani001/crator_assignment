@@ -55,6 +55,7 @@ class Action(models.Model):
     input_schema = models.JSONField(default=dict, blank=True)
     output_schema = models.JSONField(default=dict, blank=True)
     default_permission = models.CharField(max_length=32, choices=PERMISSION_CHOICES)
+    mcp_tool_name = models.CharField(max_length=128, blank=True, default="")
 
     class Meta:
         unique_together = ("toolkit", "slug")

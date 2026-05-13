@@ -38,16 +38,20 @@ Hard rules:
 
 
 DEFAULT_PROMPT = (
-    "Demo the gateway end-to-end. Steps:\n"
+    "Demo the gateway end-to-end against the live Notion MCP server. Steps:\n"
     "1. Call GenerateJWT.\n"
     "2. GET /api/external-services/toolkits/ to discover toolkits.\n"
     "3. GET the actions for the 'notion' toolkit and print their permissions.\n"
-    "4. Call read_page with {\"page_id\":\"p1\"} - expect HTTP 200.\n"
-    "5. Call update_page with {\"page_id\":\"p1\",\"fields\":{\"title\":\"New\"}} - "
-    "expect HTTP 202, then poll the approval status. While polling, ask the user "
-    "to run the admin resolve curl command (print it for them).\n"
-    "6. Call delete_page with {\"page_id\":\"p1\"} - expect HTTP 403.\n"
-    "7. GET /api/external-services/audit/ and summarize the outcomes recorded."
+    "4. GET the input schema for each action so you know the exact payload shape.\n"
+    "   The schemas are Notion-native (e.g. read_page requires `page_id`, update_page\n"
+    "   requires `page_id` and `properties`, delete_page requires `block_id`).\n"
+    "5. Ask the user for a real Notion page_id (and a block_id for the delete step).\n"
+    "6. Call read_page with {\"page_id\":\"<id>\"} - expect HTTP 200.\n"
+    "7. Call update_page with {\"page_id\":\"<id>\",\"properties\":{...}} - expect\n"
+    "   HTTP 202, then poll the approval status. While polling, print the admin\n"
+    "   resolve curl command for the user to run.\n"
+    "8. Call delete_page with {\"block_id\":\"<id>\"} - expect HTTP 403.\n"
+    "9. GET /api/external-services/audit/ and summarize the outcomes recorded."
 )
 
 
@@ -126,7 +130,7 @@ def _extract_text(content):
 
 if __name__ == "__main__":
     if AGENT_ID.startswith("<set"):
-        print("ERROR: set AGENT_ID env var (see `python manage.py seed_catalog`).",
+        print("ERROR: set AGENT_ID env var (see `python manage.py register_notion_mcp`).",
               file=sys.stderr)
         sys.exit(1)
     asyncio.run(main())

@@ -72,7 +72,11 @@ NOTION_ACTIONS = [
 
 
 class Command(BaseCommand):
-    help = "Seed the toolkit catalog and a demo agent."
+    help = (
+        "Seed the toolkit catalog with MOCK Notion actions (offline dev only). "
+        "For real MCP-driven registration use `register_notion_mcp`. "
+        "Rows seeded by this command have empty mcp_tool_name and are NOT executable."
+    )
 
     def handle(self, *args, **options):
         tk, _ = Toolkit.objects.update_or_create(

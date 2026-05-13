@@ -1,7 +1,12 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR.parent / ".env", override=True)
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-django-secret-change-me")
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
@@ -77,3 +82,5 @@ REST_FRAMEWORK = {
 
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-jwt-secret-change-me")
 JWT_TTL_MINUTES = int(os.environ.get("JWT_TTL_MINUTES", "20"))
+
+NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")
