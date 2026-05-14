@@ -12,6 +12,62 @@ The diagram is the entire API surface, grouped by what each endpoint *does* rath
 
 ---
 
+## Setting up locally
+
+Two processes: Django gateway (`backend/`) and CLI agent (`agent/`). Run them in separate shells.
+
+### Backend
+
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # set NOTION_TOKEN, rotate secrets
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py seed_catalog_mock          # local toolkit + actions
+python manage.py register_notion_mcp        # registers Notion toolkit, prints AGENT_ID
+python manage.py runserver
+```
+
+Note the `AGENT_ID` printed by `register_notion_mcp` - the agent needs it.
+
+### Agent
+
+```bash
+cd agent
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # populate ANTHROPIC_API_KEY, AGENT_ID, NOTION_PAGE_ID, NOTION_BLOCK_ID
+python cli.py                 # runs default end-to-end demo
+python cli.py "your prompt"   # or pass a custom prompt
+```
+
+Populate every value in `agent/.env` before running. `GATEWAY_URL` defaults to `http://localhost:8000`.
+
+---
+
+## How the pieces fit
+
+Agent mints JWT → hits `/call/` → resolver branches on permission: `always_allow` runs executor (200), `requires_approval` creates ticket (202, agent polls `/status/`), `always_deny` short-circuits (403). Human resolves via `PATCH /resolve/`. Every branch writes one `AuditLog` row.
+
+Invariants:
+1. No action runs without `resolve()`.
+2. No attempt goes unaudited (append-only, survives agent deletion via `agent_uuid` snapshot).
+3. Agents cannot self-escalate - `PermissionOverride` writes require `kind=admin`.
+
+## Data model
+
+`Agent` (UUID) → `PermissionOverride` (sparse, deviations only) → `Action` (in `Toolkit`, with schemas + `default_permission`). `ApprovalTicket` holds gated-call state. `AuditLog` is immutable - FK + snapshot columns so rows survive deletes.
+
+## Why this shape
+
+Permissions layer only works if every external call goes through it. `/call/` is the sole executor path; `resolve()` and `AuditLog.create()` are unskippable. The diagram documents a chokepoint, not an API.
+
+---
+
+## Request reference
+
 ### 1. Auth requests - bootstrap identity
 
 ```
@@ -107,48 +163,3 @@ PUT /api/external-services/agents/<agent_id>/permissions/
 The one write endpoint that requires an **admin JWT** (`kind=admin`), not an agent JWT. This is the self-escalation gate: without the kind split, any agent with a valid token could `PUT` itself to `always_allow` on a `delete` action.
 
 The write is **sparse** - if the requested permission equals the action's `default_permission`, any existing override row is deleted instead of upserted. The DB only stores deviations from default. Resolution stays cheap: `override > default`.
-
----
-
-## How the pieces fit
-
-```
-   ┌──────────────┐    JWT     ┌──────────────────┐    permission?    ┌────────────────────┐
-   │  Agent (CLI) │──────────► │  /call/ endpoint │──────────────────►│  resolver(agent,   │
-   │  + curl      │            │                  │                   │   action)          │
-   └──────────────┘            └────────┬─────────┘                   └──────────┬─────────┘
-          ▲                             │                                        │
-          │   202 + ticket_id           ▼                                        ▼
-          │                   ┌──────────────────┐                ┌──────────────────────────┐
-          │                   │  ApprovalTicket  │                │  always_allow -> executor │
-          │  GET /status/     │  (pending)       │                │  always_deny  -> 403      │
-          │<-──────────────────┤                  │                │  requires_app -> ticket   │
-          │                   └────────┬─────────┘                └──────────┬───────────────┘
-          │                            │                                     │
-          │                            ▼                                     ▼
-          │                   ┌──────────────────┐                ┌──────────────────────────┐
-          │                   │   Human (admin)  │                │  AuditLog (one row per   │
-          │                   │   PATCH /resolve/│                │  attempt - append-only)  │
-          │                   └────────┬─────────┘                └──────────────────────────┘
-          │                            │
-          └────────────────────────────┘
-                approved / rejected
-```
-
-Three invariants the architecture exists to enforce:
-
-1. **No action runs without a policy check.** The only path to an executor is through `/call/`, which calls `resolve()` before any side effect.
-2. **No attempt goes unrecorded.** Every branch of `/call/` writes an `AuditLog` row before returning. Append-only at the model level (`save()` refuses to update an existing row) and survives agent deletion via the `agent_uuid` snapshot.
-3. **Agents cannot grant themselves new powers.** The `kind` claim on JWTs partitions tokens into roles, and the only write path to `PermissionOverride` requires `kind=admin`.
-
----
-
-## Data model - one paragraph
-
-`Agent` (UUID PK) -> `PermissionOverride` (sparse: only deviations from default) -> `Action` (belongs to a `Toolkit`, carries `input_schema`, `output_schema`, `default_permission`). `ApprovalTicket` holds the params + state for a gated call until a human resolves it. `AuditLog` is the immutable ledger - every row has FK references *and* snapshot columns (`agent_uuid`, `toolkit_slug`, `action_slug`, `agent_display`) so the row remains readable after any of its referents are deleted.
-
----
-
-## Why this shape
-
-A permissions layer is only worth building if **every** external call is forced through it. The architecture above bakes that constraint into the wire: the agent has no tool that bypasses `/call/`, and `/call/` has no path that bypasses `resolve()` or `AuditLog.objects.create()`. The diagram isn't documenting an API - it's documenting a chokepoint.

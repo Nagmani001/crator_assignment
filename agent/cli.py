@@ -2,6 +2,10 @@ import asyncio
 import os
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
 from tools import GATEWAY_URL, jwt_server
