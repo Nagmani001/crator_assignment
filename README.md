@@ -25,8 +25,7 @@ pip install -r requirements.txt
 cp .env.example .env          # set NOTION_TOKEN, rotate secrets
 python manage.py migrate
 python manage.py createsuperuser
-python manage.py seed_catalog_mock          # local toolkit + actions
-python manage.py register_notion_mcp        # registers Notion toolkit, prints AGENT_ID
+python manage.py register_notion_mcp        # registers Notion toolkit + demo agent, prints AGENT_ID
 python manage.py runserver
 ```
 
