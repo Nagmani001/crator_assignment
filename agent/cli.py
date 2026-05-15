@@ -86,13 +86,9 @@ async def main():
         system_prompt=SYSTEM_PROMPT,
         allowed_tools=[
             "Bash",
-            "Read",
-            "Write",
-            "Edit",
             "mcp__auth__GenerateJWT",
         ],
         mcp_servers={"auth": jwt_server},
-        permission_mode="acceptEdits",
     )
 
     async with ClaudeSDKClient(options=options) as client:
